@@ -10,6 +10,8 @@ import time
 import errno
 import random
 import argparse
+import secrets ###rev
+import string ###rev
 
 
 class tracexss:
@@ -29,32 +31,17 @@ class tracexss:
         self.domain = domain
         self.result = []
         self.urls = []
-        '''
-        bagian ini mengatur bagaimana fungsi-fungsi dipanggil berdasarkan argumen yang diberikan saat menginisiasi class tracexss
-        apabila argumen bukan berisi domain, maka akan dilakukan pemanggilan fungsi crawl() untuk crawling url dan parameter yang ada pada domain
-        hasil crawling akan disimpan pada list urls[]
-
-        apabila argumen berisi url, maka tidak dilakukan crawling dan hanya akan menjalankan fungsi scanner() untuk memindai kerentanan XSS pada url
-
-        apabila argumen berisi filename .txt, maka file tersebut akan dibaca dan url disimpan di list urls[]
-        jika list urls[] valid/terdapat url, maka setiap url pada urls[] akan di scan dengan fungsi scanner() untuk mencari kerentanan XSS
-        hasil scanner() akan disimpan di list result[] dan akan ditampilkan di layar
-        '''
+        
         try:
-            
             if filename == None:
-                #jika filename tidak ada, url tidak ada, dan domain ada
                 if url == None and not domain == None:
-                    #memanggil fungsi crawl() untuk mencari daftar url pada domain
                     self.crawl(domain)
-                    #filename = lokasi output hasil crawl()
                     filename = f"output/crawl/{domain}.txt"
                     if os.path.exists(filename):
                         urls = self.read(filename)
                     else:
                         filename = f"results/crawl/{domain}.txt"
                         urls = self.read(filename)
-                
                 elif not url == None and domain == None:
                     self.scanner(url)
                     if self.result:
@@ -78,7 +65,7 @@ class tracexss:
         
     def read(self,filename):
         '''
-        Read & sort GET urls dari filename yang diberikan
+        Read & sort GET  urls from given filename
         '''
         print(Fore.WHITE + "READING URLS")
         urls = subprocess.check_output(f"cat {filename} | grep '=' | sort -u",shell=True).decode('utf-8')
@@ -88,21 +75,18 @@ class tracexss:
 
     def write(self, output, value):
         '''
-        Write output ke filename yang diberikan (opsional)
+        Writes the output back to the given filename.
         '''
         if not output:
             return None
         subprocess.call(f"echo '{value}' >> {output}",shell=True)
 
     def replace(self,url,param_name,value):
-        '''
-        replace nilai parameter dengan value tertentu (payload)
-        '''
         return re.sub(f"{param_name}=([^&]+)",f"{param_name}={value}",url)
         
     def bubble_sort(self, arr):
         '''
-        Sorting payloads
+        For sorting the payloads
         '''
         a = 0
         keys = []
@@ -128,7 +112,7 @@ class tracexss:
     def crawl(self, domain):
         self.domain = domain
         '''
-        Crawling link dengan class Crawl (return type: None)
+        Use this method to crawl the links using katana (return type: None)
         '''
         print(Fore.BLUE + "[+] CRAWLING DOMAIN")
         crawling = Crawler(domain)
@@ -136,10 +120,11 @@ class tracexss:
 
     def parameters(self, url):
         '''
-        Mencari setiap parameter yang ada di url. return berupa list
+        This function will return every parameter in the url as dictionary.
         '''
         param_names = []
         params = urlparse(url).query
+        print(params)
         params = params.split("&")
         if len(params) == 1:
             params = params[0].split("=")
@@ -152,7 +137,7 @@ class tracexss:
 
     def parser(self, url, param_name, value):
         '''
-        memisahkan komponen url, kemudian memisahkan lagi parameter dengan nilainya. return berupa dictionary {parameter:value}
+        This function will replace the parameter's value with the given value and returns a dictionary
         '''
         final_parameters = {}
         parsed_data = urlparse(url)
@@ -171,29 +156,24 @@ class tracexss:
         final_parameters[param_name] = value
         return final_parameters
 
-    def validator(self, arr, param_name, url):
-        '''
-        validasi apakah nilai parameter yang mengandung karakter berbahaya menghasilkan respon dari server target
-        '''
+    def validator(self, danger_char, param_name, url):
         dic = {param_name: []}
+        char = string.ascii_letters + string.digits ###rev
+        randomstr = ''.join(secrets.choice(char) for _ in range (12)) ###rev
         try:
-            for data in arr:
-                final_parameters = self.parser(url,param_name,data + "randomstring")
+            for data in danger_char:
+                final_parameters = self.parser(url,param_name,data + randomstr)
                 new_url = urlparse(url).scheme + "://" + urlparse(url).hostname + "/" + urlparse(url).path
                 response = requests.get(new_url,params=final_parameters,verify=False).text
-                if data + "randomstring" in response:
-                    if self.threads == 1:
-                        print(Fore.GREEN + f"[+] {data} is reflecting in the response")
+                print(response)
+                if data + randomstr in response:
+                    print(Fore.GREEN + f"[+] {data} is reflecting in the response")
                     dic[param_name].append(data)
         except Exception as e:
             print(e)
         return dic
 
     def fuzzer(self, url):
-        '''
-        melakukan fuzzing dan memanggil fungsi validator() untuk memvalidasi karakter berbahaya yang berhasil mendapat respon
-        fuzzing adalah teknik untuk menguji kerentanan web (input validation atau eror handling) dengan cara memasukan nilai yang tidak normal ke suatu form inpu
-        '''
         data = []
         dangerous_characters = [  # You can add dangerous characters here
             ">",
@@ -204,28 +184,22 @@ class tracexss:
             ";"
         ]
         parameters = self.parameters(url)
-        if ' ' in parameters and len(parameters) == 1:
+        print(parameters)
+        if '' in parameters and len(parameters) == 1:
             print(f"[+] NO GET PARAMETER IDENTIFIED...EXITING")
             exit()
-        if self.threads == 1:
-            print(f"[+] {len(parameters)} parameters identified")
+        print(f"[+] {len(parameters)} parameters identified")
         for parameter in parameters:
-            if self.threads == 1:
-                print(Fore.WHITE + f"[+] Testing parameter name: {parameter}")
+            print(Fore.WHITE + f"[+] Testing parameter name: {parameter}")
             out = self.validator(dangerous_characters,parameter,url)
             data.append(out)
-        if self.threads == 1:
-            print("[+] FUZZING HAS BEEN COMPLETED")
+        print("[+] FUZZING HAS BEEN COMPLETED")
         return self.bubble_sort(data)
 
-    def filter_payload(self,arr):
-        '''
-        Memuat payload dari file payloads.json
-        '''
+    def filter_payload(self,fuzz_char):
         payload_list = []
-        size = int(len(arr) / 2)
-        if self.threads == 1:
-            print(Fore.WHITE + f"[+] LOADING PAYLOAD FILE payloads.json")
+        size = int(len(fuzz_char) / 2)
+        print(Fore.WHITE + f"[+] LOADING PAYLOAD FILE payloads.json")
         dbs = open("payloads.json")
         dbs = json.load(dbs)
         new_dbs = []
@@ -233,7 +207,7 @@ class tracexss:
             if not dbs[i]['waf']:
                 new_dbs.append(dbs[i])
         dbs = new_dbs
-        for char in arr:
+        for char in fuzz_char:
             for payload in dbs:
                 attributes = payload['Attribute']
                 if char in attributes:
@@ -242,13 +216,9 @@ class tracexss:
             return e['count']
         dbs.sort(key=fun,reverse=True)
         for payload in dbs:
-            if payload['count'] == len(arr) and len(payload['Attribute']) == payload['count'] :
-                #print(payload)
-                if self.threads == 1:
-                    print(Fore.GREEN + f"[+] FOUND SOME PERFECT PAYLOADS FOR THE TARGET")
-                #print(payload['count'],len(payload['Attributes']))
+            if payload['count'] == len(fuzz_char) and len(payload['Attribute']) == payload['count'] :
+                print(Fore.GREEN + f"[+] FOUND SOME PERFECT PAYLOADS FOR THE TARGET")
                 payload_list.insert(0,payload['Payload'])
-                #print(payload_list)
                 continue
             if payload['count'] > size:
                 payload_list.append(payload['Payload'])
@@ -256,25 +226,16 @@ class tracexss:
         return payload_list
 
     def scanner(self,url):
-        '''
-        Melakukan fungsi scanning dengan memanggil beberapa fungsi dalam class
-        Alur= fuzzing url --> load payload --> parser nilai parameter dengan payload --> memerika respon server (testing) --> menampilkan hasil scanning dan testing
-        '''
         print(Fore.WHITE + f"[+] TESTING {url}")
         out = self.fuzzer(url)
-       # print(out)
         for data in out:
             for key in data:
                 payload_list = self.filter_payload(data[key])
-                #print(f"[+] TESTING THE BELOW PAYLOADS {payload_list}")
             for payload in payload_list:
                 try:
-                    #print(f"Testing: {payload}")
                     data = self.parser(url,key,payload)
                     parsed_data = urlparse(url)
                     new_url = parsed_data.scheme +  "://" + parsed_data.netloc + parsed_data.path
-                    #print(new_url)
-                    #print(data)
                     response = requests.get(new_url, params=data,verify=False).text
                     if payload in response:
                         print(Fore.RED + f"[+] VULNERABLE: {url}\nPARAMETER: {key}\nPAYLOAD USED: {payload}")
@@ -283,8 +244,7 @@ class tracexss:
                         return True
                 except Exception as e:
                     print(e)
-        if self.threads == 1:
-            print(Fore.LIGHTWHITE_EX + f"[+] TARGET SEEMS TO BE NOT VULNERABLE")
+        print(Fore.LIGHTWHITE_EX + f"[+] TARGET SEEMS TO BE NOT VULNERABLE")
         return None
 
 class Crawler:
@@ -308,9 +268,6 @@ class Crawler:
         print(f"\u001b[32m[+] Crawling output is saved here   :\u001b[31m \u001b[36moutput/crawl/{domain}.txt\u001b[31m")
     
     def save_func(self, final_urls, domain):
-        '''
-        mengatur lokasi penyimpanan output
-        '''
         filename = f"output/crawl/{domain}.txt"
     
         if os.path.exists(filename):
@@ -330,7 +287,8 @@ class Crawler:
     def param_extract(self, response):
         placeholder = "FUZZ"
         ''' 
-        ekstrak URLs dengan parameter tertentu
+        Function to extract URLs with parameters (ignoring the black list extention)
+        regexp : r'.*?:\/\/.*\?.*\=[^$]'
     
         '''
         parsed = list(set(re.findall(r'.*?:\/\/.*\?.*\=[^$]' , response)))
@@ -343,9 +301,6 @@ class Crawler:
         return list(set(final_uris))
         
     def connector(self, url):
-        '''
-        mengatur koneksi dengan target
-        '''
         result = False
         user_agent_list = [
         #Chrome
@@ -406,22 +361,23 @@ class Crawler:
         
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    #parser.add_argument('-m', dest='module', help='Select the module to be used. Eg: 1, 2, 3, etc', type=int, required=True)
     parser.add_argument('-d', dest='domain', help='Scrapping url from domain name of the target [ex: hackerone.com]')
     parser.add_argument('-f', dest='filename', help='Specify Filename to scan. Eg: urls.txt etc')
     parser.add_argument('-u', dest='url', help='Scan a single URL. Eg: http://example.com/?id=2')
     parser.add_argument('-o', dest='output', help='Filename to store output. Eg: result.txt')
+
     args = parser.parse_args()
 
+    #module= args.module
     domain = args.domain
     filename = args.filename
     url = args.url
     output = args.output
 
     module = tracexss(domain, filename, url, output)
-
-    # Usage:
-    # python3 tracexss.py -d testphp.vulnweb.com 
-    # python3 tracexss.py -f urls.txt
-    # python3 tracexss.py -u http://testphp.vulnweb.com/pp=FUZZ
-    # python3 tracexss.py -d testphp.vulnweb.com -o hasil.txt
+    #python3 tracexss.py -d testphp.vulnweb.com 
+    #python3 tracexss.py -f urls.txt
+    #python3 tracexss.py -u http://testphp.vulnweb.com/pp=FUZZ
+    #python3 tracexss.py -d testphp.vulnweb.com -o hasil.txt
 

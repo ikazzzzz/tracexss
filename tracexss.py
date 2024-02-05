@@ -124,7 +124,6 @@ class tracexss:
         '''
         param_names = []
         params = urlparse(url).query
-        print(params)
         params = params.split("&")
         if len(params) == 1:
             params = params[0].split("=")
@@ -165,7 +164,6 @@ class tracexss:
                 final_parameters = self.parser(url,param_name,data + randomstr)
                 new_url = urlparse(url).scheme + "://" + urlparse(url).hostname + "/" + urlparse(url).path
                 response = requests.get(new_url,params=final_parameters,verify=False).text
-                print(response)
                 if data + randomstr in response:
                     print(Fore.GREEN + f"[+] {data} is reflecting in the response")
                     dic[param_name].append(data)
@@ -184,7 +182,6 @@ class tracexss:
             ";"
         ]
         parameters = self.parameters(url)
-        print(parameters)
         if '' in parameters and len(parameters) == 1:
             print(f"[+] NO GET PARAMETER IDENTIFIED...EXITING")
             exit()
